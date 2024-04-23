@@ -1,0 +1,80 @@
+pipeline {
+    agent any
+    tools {
+        nodejs 'node21'
+    }
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Arijit094/3-Tier-DevOps-CICD-Pipeline-Project.git'
+            }
+        }
+        stage('Install Package Dependencies') {
+            steps {
+                sh "npm install"
+            }
+        }
+        stage('Unit Tests') {
+            steps {
+                sh "npm test"
+            }
+        }
+        stage('Trivy FS Scan') {
+            steps {
+                sh "trivy fs --format table -o fs-report.html ."
+            }
+        }
+        stage('SonarQube') {
+            steps {
+               withSonarQubeEnv('sonar') {
+                    sh "$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectKey=Campground -Dsonar.projectName=Campground"
+                       
+                }
+            }
+        }
+        stage('Docker Build & Tag') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-token', toolName: 'docker') {
+                        sh "docker build -t arijit094/campa:latest ."
+                    }
+                }
+            }
+        }
+         stage('Trivy Image Scan') {
+            steps {
+                sh "trivy image  --format table -o fs-report.html arijit094/campa:latest"
+            }
+        }
+        stage('Docker push image') {
+            steps {
+                script{
+                withDockerRegistry(credentialsId: 'docker-token', toolName: 'docker') {
+                    sh "docker push  arijit094/campa:latest"
+                  }
+               }
+            }
+       }
+       stage('production deployment to EKS') {
+            steps {
+                withKubeCredentials(kubectlCredentials: [[caCertificate: '', clusterName: 'my-eks2', contextName: '', credentialsId: 'kube-token', namespace: 'webapps', serverUrl: 'https://050697AF55434B648E8059299A47DB2C.gr7.ap-south-1.eks.amazonaws.com']]) {
+                    sh "kubectl apply -f /var/lib/jenkins/workspace/Dev-env-deployment/Manifests/dss.yml"
+                    sleep 60
+                }
+            }
+        }
+        stage('verify the deployment') {
+            steps {
+                withKubeCredentials(kubectlCredentials: [[caCertificate: '', clusterName: 'my-eks2', contextName: '', credentialsId: 'kube-token', namespace: 'webapps', serverUrl: 'https://050697AF55434B648E8059299A47DB2C.gr7.ap-south-1.eks.amazonaws.com']]) {
+                    sh "kubectl get pods -n webapps"
+                    sh "kubectl get svc -n webapps"
+                }
+            }
+        }
+
+    }
+}
