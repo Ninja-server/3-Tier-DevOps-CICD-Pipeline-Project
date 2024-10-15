@@ -34,6 +34,14 @@ jobs:
               push: true
               tags: ${{ secrets.DOCKER_USERNAME }}/node-app1:${{ github.sha }}
 
+          - name: Upload the artifacts
+            uses: actions/upload-artifact@v4
+            with: 
+              name: node-artifacts
+              path: | 
+                ${{ secrets.DOCKER_USERNAME }}/node-app1:${{ github.sha }}
+                
+
           
           
             
